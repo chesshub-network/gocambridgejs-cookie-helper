@@ -2,7 +2,7 @@
 <html lang="de" class="dark">
 <head>
   <meta charset="UTF-8">
-  <title>Gocambridge Web (Auto Auth)</title>
+  <title>Gocambridge Web – Cambridge Login Flow</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <script src="https://cdn.tailwindcss.com"></script>
@@ -10,65 +10,109 @@
 
   <style>
     body { background:#0b0b0f; color:#e5e7eb; }
-    select, input { background:#111827; border:1px solid #374151; }
+    input, select { background:#111827; border:1px solid #374151; border-radius:6px; padding:0.5rem; }
     table { border-color:#374151; }
   </style>
 </head>
-<body class="p-4">
+<body class="p-4 space-y-6">
 
-  <h1 class="text-xl font-bold mb-2 flex items-center gap-2">
-    <i data-lucide="book-open"></i>
-    Gocambridge Web (Auto Auth)
+  <h1 class="text-xl font-bold flex items-center gap-2">
+    <i data-lucide="log-in"></i>
+    Gocambridge Web – Cambridge Login
   </h1>
 
-  <p class="text-gray-400 mb-4 text-sm">
-    Diese Version benötigt kein Cookie‑Feld. Safari sendet das CambridgeOne‑Cookie automatisch.
-  </p>
+  <!-- LOGIN SECTION -->
+  <section id="loginSection" class="space-y-3 max-w-xl border border-gray-800 p-4 rounded-lg">
+    <h2 class="font-semibold text-sm">Anmeldung</h2>
+    <p class="text-xs text-gray-400">
+      Dieser Flow funktioniert wie OAuth: Du meldest dich bei Cambridge One an, kehrst zurück und die App ist automatisch authentifiziert.
+    </p>
 
-  <div class="space-y-3 max-w-xl">
-    <div>
-      <label class="text-gray-400 text-sm">Cambridge One URL</label>
-      <input id="url" class="w-full p-2 rounded text-sm" placeholder="https://www.cambridgeone.org/nlp/apigateway/org_.../class/.../product/...">
-    </div>
-
-    <button id="startBtn" class="px-4 py-2 bg-blue-600 rounded text-white font-semibold flex items-center gap-2 text-sm">
-      <i data-lucide="play"></i> Start
+    <button id="loginBtn"
+            class="px-4 py-2 bg-blue-600 rounded-full text-xs font-semibold flex items-center gap-2">
+      <i data-lucide="external-link"></i>
+      Mit Cambridge One anmelden
     </button>
 
-    <div id="status" class="text-gray-400 text-sm"></div>
-  </div>
+    <button id="continueBtn"
+            class="px-4 py-2 bg-emerald-600 rounded-full text-xs font-semibold flex items-center gap-2 opacity-30 pointer-events-none">
+      <i data-lucide="check-circle"></i>
+      Weiter zur App
+    </button>
 
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 max-w-4xl">
-    <div>
-      <label class="text-gray-400 text-sm">Unit</label>
-      <select id="unitSelect" class="w-full p-2 rounded text-sm" disabled></select>
-    </div>
-    <div>
-      <label class="text-gray-400 text-sm">Section</label>
-      <select id="sectionSelect" class="w-full p-2 rounded text-sm" disabled></select>
-    </div>
-    <div>
-      <label class="text-gray-400 text-sm">Lesson</label>
-      <select id="lessonSelect" class="w-full p-2 rounded text-sm" disabled></select>
-    </div>
-  </div>
+    <p id="loginStatus" class="text-xs text-gray-400"></p>
+  </section>
 
-  <div class="mt-6 max-w-4xl">
-    <table id="answersTable" class="w-full hidden border text-sm">
-      <thead>
-        <tr class="bg-gray-800">
-          <th class="border p-2 w-12">#</th>
-          <th class="border p-2">Correct Answer</th>
-        </tr>
-      </thead>
-      <tbody id="answersBody"></tbody>
-    </table>
-  </div>
+  <!-- APP SECTION -->
+  <section id="appSection" class="space-y-4 opacity-30 pointer-events-none">
+    <h2 class="font-semibold text-sm">App</h2>
 
-  <pre id="errorBox" class="hidden mt-4 p-3 bg-red-900 text-red-200 rounded text-xs max-w-4xl"></pre>
+    <div class="space-y-2 max-w-xl">
+      <label class="text-xs text-gray-400">Cambridge One URL</label>
+      <input id="url" class="w-full text-xs"
+             placeholder="https://www.cambridgeone.org/nlp/apigateway/org_.../class/.../product/...">
+      <button id="startBtn"
+              class="px-4 py-2 bg-blue-600 rounded-full text-xs font-semibold">
+        Start
+      </button>
+      <div id="status" class="text-xs text-gray-400"></div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+      <div>
+        <label class="text-xs text-gray-400">Unit</label>
+        <select id="unitSelect" class="w-full text-xs" disabled></select>
+      </div>
+      <div>
+        <label class="text-xs text-gray-400">Section</label>
+        <select id="sectionSelect" class="w-full text-xs" disabled></select>
+      </div>
+      <div>
+        <label class="text-xs text-gray-400">Lesson</label>
+        <select id="lessonSelect" class="w-full text-xs" disabled></select>
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <table id="answersTable" class="w-full hidden border text-xs">
+        <thead>
+          <tr class="bg-gray-800">
+            <th class="border p-2 w-10">#</th>
+            <th class="border p-2">Correct Answer</th>
+          </tr>
+        </thead>
+        <tbody id="answersBody"></tbody>
+      </table>
+    </div>
+
+    <pre id="errorBox"
+         class="hidden mt-3 p-3 bg-red-900 text-red-200 rounded text-[10px] max-w-4xl"></pre>
+  </section>
 
   <script>
     lucide.createIcons();
+
+    /* ---------------- Cambridge Login Simulation ---------------- */
+
+    const loginBtn = document.getElementById("loginBtn");
+    const continueBtn = document.getElementById("continueBtn");
+    const loginStatus = document.getElementById("loginStatus");
+    const appSection = document.getElementById("appSection");
+
+    loginBtn.onclick = () => {
+      window.open("https://www.cambridgeone.org", "_blank");
+      loginStatus.textContent = "Bitte im neuen Tab einloggen. Danach hier zurückkommen.";
+      continueBtn.style.opacity = "1";
+      continueBtn.style.pointerEvents = "auto";
+    };
+
+    continueBtn.onclick = () => {
+      loginStatus.textContent = "Wenn du eingeloggt bist, ist die App jetzt authentifiziert.";
+      appSection.style.opacity = "1";
+      appSection.style.pointerEvents = "auto";
+    };
+
+    /* ---------------- Cambridge API Logic ---------------- */
 
     const BASE_CAMBRIDGE_URL = "https://www.cambridgeone.org/nlp/apigateway/%s/product/%s/";
     const LESSON_URL = "https://content.cambridgeone.org/cup1/products/%s/2/assets/ext-cup-xapiscoreable/%s/data.js";
@@ -89,7 +133,7 @@
           headers: this.headers,
           credentials: "include"
         });
-        if (!res.ok) throw new Error("HTTP " + res.status + " beim Laden der Units");
+        if (!res.ok) throw new Error("HTTP " + res.status);
         return await res.json();
       }
 
@@ -100,11 +144,9 @@
           headers: this.headers,
           credentials: "include"
         });
-        if (!res.ok) throw new Error("HTTP " + res.status + " beim Laden der Lesson");
+        if (!res.ok) throw new Error("HTTP " + res.status);
         const body = await res.text();
-
-        (function() { eval(body); })();
-
+        (function(){ eval(body); })();
         const data = window[AJAX_DATA];
         if (!data) throw new Error("ajaxData not found");
 
@@ -114,23 +156,18 @@
         let m;
         while ((m = regex.exec(jsonStr)) !== null) results.push(m[1]);
 
-        if (results.length === 0) {
-          const generic = /Correct answer:&lt;br \/> (.*?)&lt;\/p&gt;/g;
-          while ((m = generic.exec(jsonStr)) !== null) results.push(m[1]);
-        }
-
         return results;
       }
     }
 
+    /* ---------------- UI Logic ---------------- */
+
     const urlEl = document.getElementById("url");
     const startBtn = document.getElementById("startBtn");
     const statusEl = document.getElementById("status");
-
     const unitSelect = document.getElementById("unitSelect");
     const sectionSelect = document.getElementById("sectionSelect");
     const lessonSelect = document.getElementById("lessonSelect");
-
     const answersTable = document.getElementById("answersTable");
     const answersBody = document.getElementById("answersBody");
     const errorBox = document.getElementById("errorBox");
@@ -139,25 +176,25 @@
     let units = null;
     let org = "", product = "", classId = "";
 
-    function setStatus(msg) { statusEl.textContent = msg || ""; }
-    function showError(err) {
+    function setStatus(msg){ statusEl.textContent = msg || ""; }
+    function showError(err){
       errorBox.classList.remove("hidden");
       errorBox.textContent = String(err);
     }
-    function clearError() {
+    function clearError(){
       errorBox.classList.add("hidden");
       errorBox.textContent = "";
     }
 
-    function parseUrl(url) {
+    function parseUrl(url){
       const m = /([^/]+)\/class\/([^/]+)\/product\/([^/]+)/.exec(url);
       if (!m) throw new Error("Invalid URL");
-      return { org: m[1], classId: m[2], product: m[3] };
+      return { org:m[1], classId:m[2], product:m[3] };
     }
 
-    function fillSelect(sel, items, exitText) {
+    function fillSelect(sel, items, exitText){
       sel.innerHTML = "";
-      items.forEach((x, i) => {
+      items.forEach((x,i)=>{
         const opt = document.createElement("option");
         opt.value = i;
         opt.textContent = x;
@@ -195,22 +232,22 @@
         answersBody.innerHTML = "";
 
         unitSelect.onchange = () => {
-          if (parseInt(unitSelect.value, 10) === exitIndex) {
+          if (parseInt(unitSelect.value,10) === exitIndex) {
             setStatus("Beendet.");
             return;
           }
-          loadSections(parseInt(unitSelect.value, 10));
+          loadSections(parseInt(unitSelect.value,10));
         };
 
         setStatus("Units geladen.");
-      } catch (e) {
+      } catch(e){
         showError(e);
         setStatus("Fehler.");
       }
     };
 
-    function loadSections(unitIndex) {
-      const sections = units.toc.result[unitIndex].items.map(s => s.name);
+    function loadSections(unitIndex){
+      const sections = units.toc.result[unitIndex].items.map(s=>s.name);
       const backIndex = fillSelect(sectionSelect, sections, "Zurück");
 
       lessonSelect.innerHTML = "";
@@ -219,7 +256,7 @@
       answersBody.innerHTML = "";
 
       sectionSelect.onchange = () => {
-        if (parseInt(sectionSelect.value, 10) === backIndex) {
+        if (parseInt(sectionSelect.value,10) === backIndex) {
           sectionSelect.innerHTML = "";
           sectionSelect.disabled = true;
           lessonSelect.innerHTML = "";
@@ -229,29 +266,29 @@
           setStatus("Bitte Unit neu wählen.");
           return;
         }
-        loadLessons(unitIndex, parseInt(sectionSelect.value, 10));
+        loadLessons(unitIndex, parseInt(sectionSelect.value,10));
       };
     }
 
-    function loadLessons(unitIndex, sectionIndex) {
-      const lessons = units.toc.result[unitIndex].items[sectionIndex].items.map(l => l.name);
+    function loadLessons(unitIndex, sectionIndex){
+      const lessons = units.toc.result[unitIndex].items[sectionIndex].items.map(l=>l.name);
       const backIndex = fillSelect(lessonSelect, lessons, "Zurück");
 
       answersTable.classList.add("hidden");
       answersBody.innerHTML = "";
 
       lessonSelect.onchange = () => {
-        if (parseInt(lessonSelect.value, 10) === backIndex) {
+        if (parseInt(lessonSelect.value,10) === backIndex) {
           answersTable.classList.add("hidden");
           answersBody.innerHTML = "";
           setStatus("Bitte Section neu wählen.");
           return;
         }
-        showSolution(unitIndex, sectionIndex, parseInt(lessonSelect.value, 10));
+        showSolution(unitIndex, sectionIndex, parseInt(lessonSelect.value,10));
       };
     }
 
-    async function showSolution(unitIndex, sectionIndex, lessonIndex) {
+    async function showSolution(unitIndex, sectionIndex, lessonIndex){
       clearError();
       setStatus("Lade Lösungen...");
 
@@ -260,20 +297,18 @@
 
       try {
         const answers = await client.getLessonResponse(product, code);
-
         answersBody.innerHTML = "";
-        answers.forEach((ans, i) => {
+        answers.forEach((ans,i)=>{
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td class="border p-2 text-center">${i + 1}</td>
+            <td class="border p-2 text-center">${i+1}</td>
             <td class="border p-2">${ans}</td>
           `;
           answersBody.appendChild(tr);
         });
-
         answersTable.classList.remove("hidden");
         setStatus("Fertig.");
-      } catch (e) {
+      } catch(e){
         showError(e);
         setStatus("Fehler beim Laden der Lösungen.");
       }
