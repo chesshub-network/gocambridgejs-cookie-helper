@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <title>Gocambridge Web</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body { background: #0b0b0f; color: #e5e7eb; }
+    select, input { background:#111827; border:1px solid #374151; }
+    table { border-color:#374151; }
+  </style>
+</head>
+<body class="p-4">
+
+  <h1 class="text-xl font-bold mb-2 flex items-center gap-2">
+    <i data-lucide="book-open"></i>
+    Gocambridge Web
+  </h1>
+
+  <p class="text-gray-400 mb-4 text-sm">
+    Port der CLI in eine Web‑App. Auf GitHub Pages einfach als <code>index.html</code> ins Repo legen.
+  </p>
+
+  <!-- Inputs -->
+  <div class="space-y-3 max-w-xl">
+    <div>
+      <label class="text-gray-400 text-sm">Cookie (c1_sid)</label>
+      <input id="cookie" class="w-full p-2 rounded text-sm" placeholder="s%3AFKu-****">
+      <p class="text-xs text-gray-500 mt-1">
+        Optional: Wenn der Browser das Cookie automatisch mitsendet, kannst du dieses Feld leer lassen.
+      </p>
+    </div>
+
+    <div>
+      <label class="text-gray-400 text-sm">Cambridge One URL</label>
+      <input id="url" class="w-full p-2 rounded text-sm" placeholder="https://www.cambridgeone.org/nlp/apigateway/org_.../class/.../product/...">
+      <p class="text-xs text-gray-500 mt-1">
+        Entspricht der URL, die du auch im CLI mit <code>-u</code> verwenden würdest.
+      </p>
+    </div>
+
+    <button id="startBtn" class="px-4 py-2 bg-blue-600 rounded text-white font-semibold flex items-center gap-2 text-sm">
+      <i data-lucide="play"></i> Start
+    </button>
+
+    <div id="status" class="text-gray-400 text-sm"></div>
+  </div>
+
+  <!-- Selectors -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 max-w-4xl">
+    <div>
+      <label class="text-gray-400 text-sm">Unit</label>
+      <select id="unitSelect" class="w-full p-2 rounded text-sm" disabled></select>
+    </div>
+    <div>
+      <label class="text-gray-400 text-sm">Section</label>
+      <select id="sectionSelect" class="w-full p-2 rounded text-sm" disabled></select>
+    </div>
+    <div>
+      <label class="text-gray-400 text-sm">Lesson</label>
+      <select id="lessonSelect" class="w-full p-2 rounded text-sm" disabled></select>
+    </div>
+  </div>
+
+  <!-- Answers -->
+  <div class="mt-6 max-w-4xl">
+    <table id="answersTable" class="w-full hidden border text-sm">
+      <thead>
+        <tr class="bg-gray-800">
+          <th class="border p-2 w-12">#</th>
+          <th class="border p-2">Correct Answer</th>
+        </tr>
+      </thead>
+      <tbody id="answersBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Error -->
+  <pre id="errorBox" class="hidden mt-4 p-3 bg-red-900 text-red-200 rounded text-xs max-w-4xl"></pre>
+
+  <!-- JS -->
+  <script>
+    lucide.createIcons();
+
+    /* ---------------- Cambridge API Port (vereinfacht) ---------------- */
+
+    const BASE_CAMBRIDGE_URL = "https://www.cambridgeone.org/nlp/apigateway/%s/product/%s/";
+    const LESSON_URL = "https://content.cambridgeone.org/cup1/products/%s/2/assets/ext-cup-xapiscoreable/%s/data.js";
+    const APP_VERSION_HEADER = "cambridgeone-app-version";
+    const APP_VERSION = "v2";
+    const AJAX_DATA = "ajaxData";
+
+    class Cambridge {
+      constructor(org, product, cookie) {
+        this.baseUrl = BASE_CAMBRIDGE_URL.replace("%s", org).replace("%s", product);
+        this.headers = { [APP_VERSION_HEADER]: APP_VERSION };
+        this.cookie = cookie || "";
+      }
+
+      async getUnits(classId) {
+        const url = this.baseUrl + classId;
+        const res = await fetch(url, {
+          method: "GET",
+          headers: this._buildHeaders(),
+          credentials: "include"
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status + " beim Laden der Units");
+        return await res.json();
+      }
+
+      async getLessonResponse(productCode, lessonId) {
+        const url = LESSON_URL.replace("%s", productCode).replace("%s", lessonId);
+        const res = await fetch(url, {
+          method: "GET",
+          headers: this._buildHeaders(),
+          credentials: "include"
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status + " beim Laden der Lesson");
+        const body = await res.text();
+
+        // Wir führen das JS aus, das ajaxData setzt (wie goja im Original)
+        // Achtung: eval – hier bewusst, weil CambridgeOne genau so arbeitet.
+        (function() {
+          // eslint-disable-next-line no-eval
+          eval(body);
+        })();
+
+        const data = window[AJAX_DATA];
+        if (!data) throw new Error("ajaxData not found");
+
+        // Sehr vereinfachte Extraktion: alle <value>...</value> im JSON
+        const jsonStr = JSON.stringify(data);
+        const regex = /<value>(.*?)<\/value>/g;
+        const results = [];
+        let m;
+        while ((m = regex.exec(jsonStr)) !== null) {
+          results.push(m[1]);
+        }
+
+        // Fallback: wenn keine <value>-Tags, versuchen wir einfache Correct-Answer-Muster
+        if (results.length === 0) {
+          const generic = /Correct answer:&lt;br \/> (.*?)&lt;\/p&gt;/g;
+          while ((m = generic.exec(jsonStr)) !== null) {
+            results.push(m[1]);
+          }
+        }
+
+        return results;
+      }
+
+      _buildHeaders() {
+        const h = { ...this.headers };
+        if (this.cookie) {
+          // Manche Umgebungen ignorieren das, aber schadet nicht
+          h["Cookie"] = "c1_sid=" + this.cookie;
+        }
+        return h;
+      }
+    }
+
+    /* ---------------- UI Logic ---------------- */
+
+    const cookieEl = document.getElementById("cookie");
+    const urlEl = document.getElementById("url");
+    const startBtn = document.getElementById("startBtn");
+    const statusEl = document.getElementById("status");
+
+    const unitSelect = document.getElementById("unitSelect");
+    const sectionSelect = document.getElementById("sectionSelect");
+    const lessonSelect = document.getElementById("lessonSelect");
+
+    const answersTable = document.getElementById("answersTable");
+    const answersBody = document.getElementById("answersBody");
+    const errorBox = document.getElementById("errorBox");
+
+    let client = null;
+    let units = null;
+    let org = "", product = "", classId = "";
+
+    function setStatus(msg) { statusEl.textContent = msg || ""; }
+    function showError(err) {
+      errorBox.classList.remove("hidden");
+      errorBox.textContent = String(err);
+    }
+    function clearError() {
+      errorBox.classList.add("hidden");
+      errorBox.textContent = "";
+    }
+
+    function parseUrl(url) {
+      // Entspricht grob deinem UrlRegex: `([^/]+)/class/([^/]+)/product/([^/]+)`
+      const m = /([^/]+)\/class\/([^/]+)\/product\/([^/]+)/.exec(url);
+      if (!m) throw new Error("Invalid URL (erwartet .../org_.../class/.../product/...)");
+      return { org: m[1], classId: m[2], product: m[3] };
+    }
+
+    function fillSelect(sel, items, exitText) {
+      sel.innerHTML = "";
+      items.forEach((x, i) => {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = x;
+        sel.appendChild(opt);
+      });
+      const opt = document.createElement("option");
+      opt.value = items.length;
+      opt.textContent = exitText;
+      sel.appendChild(opt);
+      sel.disabled = false;
+      return items.length;
+    }
+
+    startBtn.onclick = async () => {
+      clearError();
+      setStatus("Lade...");
+
+      try {
+        const parsed = parseUrl(urlEl.value.trim());
+        org = parsed.org;
+        product = parsed.product;
+        classId = parsed.classId;
+
+        client = new Cambridge(org, product, cookieEl.value.trim());
+        units = await client.getUnits(classId);
+
+        const unitNames = units.toc.result.map(u => u.name);
+        const exitIndex = fillSelect(unitSelect, unitNames, "Exit");
+
+        sectionSelect.innerHTML = "";
+        sectionSelect.disabled = true;
+        lessonSelect.innerHTML = "";
+        lessonSelect.disabled = true;
+        answersTable.classList.add("hidden");
+        answersBody.innerHTML = "";
+
+        unitSelect.onchange = () => {
+          if (parseInt(unitSelect.value, 10) === exitIndex) {
+            setStatus("Beendet.");
+            return;
+          }
+          loadSections(parseInt(unitSelect.value, 10));
+        };
+
+        setStatus("Units geladen.");
+      } catch (e) {
+        showError(e);
+        setStatus("Fehler.");
+      }
+    };
+
+    function loadSections(unitIndex) {
+      const sections = units.toc.result[unitIndex].items.map(s => s.name);
+      const backIndex = fillSelect(sectionSelect, sections, "Zurück");
+
+      lessonSelect.innerHTML = "";
+      lessonSelect.disabled = true;
+      answersTable.classList.add("hidden");
+      answersBody.innerHTML = "";
+
+      sectionSelect.onchange = () => {
+        if (parseInt(sectionSelect.value, 10) === backIndex) {
+          sectionSelect.innerHTML = "";
+          sectionSelect.disabled = true;
+          lessonSelect.innerHTML = "";
+          lessonSelect.disabled = true;
+          answersTable.classList.add("hidden");
+          answersBody.innerHTML = "";
+          setStatus("Bitte Unit neu wählen.");
+          return;
+        }
+        loadLessons(unitIndex, parseInt(sectionSelect.value, 10));
+      };
+    }
+
+    function loadLessons(unitIndex, sectionIndex) {
+      const lessons = units.toc.result[unitIndex].items[sectionIndex].items.map(l => l.name);
+      const backIndex = fillSelect(lessonSelect, lessons, "Zurück");
+
+      answersTable.classList.add("hidden");
+      answersBody.innerHTML = "";
+
+      lessonSelect.onchange = () => {
+        if (parseInt(lessonSelect.value, 10) === backIndex) {
+          answersTable.classList.add("hidden");
+          answersBody.innerHTML = "";
+          setStatus("Bitte Section neu wählen.");
+          return;
+        }
+        showSolution(unitIndex, sectionIndex, parseInt(lessonSelect.value, 10));
+      };
+    }
+
+    async function showSolution(unitIndex, sectionIndex, lessonIndex) {
+      clearError();
+      setStatus("Lade Lösungen...");
+
+      const item = units.toc.result[unitIndex].items[sectionIndex].items[lessonIndex];
+      const code = item["item-code"].split("/").pop();
+
+      try {
+        const answers = await client.getLessonResponse(product, code);
+
+        answersBody.innerHTML = "";
+        answers.forEach((ans, i) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="border p-2 text-center">${i + 1}</td>
+            <td class="border p-2">${ans}</td>
+          `;
+          answersBody.appendChild(tr);
+        });
+
+        answersTable.classList.remove("hidden");
+        setStatus("Fertig.");
+      } catch (e) {
+        showError(e);
+        setStatus("Fehler beim Laden der Lösungen.");
+      }
+    }
+  </script>
+</body>
+</html>
